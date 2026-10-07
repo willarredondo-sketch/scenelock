@@ -1,0 +1,27 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{START_FRAME_IMAGE}}"
+    }
+  },
+  "2": {
+    "class_type": "GeminiImage2Node",
+    "inputs": {
+      "prompt": "{{END_PROMPT}}",
+      "model": "{{IMAGE_MODEL}}",
+      "seed": "{{SEED}}",
+      "aspect_ratio": "{{ASPECT_RATIO}}",
+      "resolution": "{{IMAGE_RESOLUTION}}",
+      "response_modalities": "IMAGE",
+      "images": ["1", 0]
+    }
+  },
+  "3": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "{{FILENAME_PREFIX}}",
+      "images": ["2", 0]
+    }
+  }
+}

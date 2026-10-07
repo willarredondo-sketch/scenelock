@@ -1,0 +1,56 @@
+# Generic backyard meal. Put your own consented reference photos at the paths
+# below. This folder ships no photos.
+
+title: Backyard burgers
+setting: a large wooden backyard table in warm afternoon light
+
+aspect_ratio: "9:16"
+image_resolution: "1K"
+video_resolution: "720p"
+duration: 8
+
+image_model: gemini-3-pro-image-preview
+video_model: seedance-1-5-pro-251215
+
+refs:
+  location: refs/location.png
+
+characters:
+  - name: Person A
+    image: refs/person_a.png
+    slot: left
+    held_object: a burger
+    held_hand: left
+  - name: Person B
+    image: refs/person_b.png
+    slot: right
+    held_object: a burger
+    held_hand: left
+
+table_lock:
+  - one white plate in front of each person, with a burger and a few fries
+  - one open unlabeled soda bottle with no cap, standing upright between the plates
+  - a paper napkin beside each plate
+  - one small ketchup cup
+
+start_pose: >
+  They are relaxed, with closed-mouth smiles, mid-conversation.
+  Neither person is eating yet. Both free hands rest open on the table,
+  fully visible.
+
+end_pose: >
+  Both keep closed-mouth smiles. Person A rests their free hand gently
+  on Person B's upper arm. Everyone still holds a burger in the same hand,
+  low near the plate. The pose is a small, reachable motion.
+
+motion_beat: >
+  They chat with closed-mouth smiles. Person A slowly moves their free hand
+  off the table and rests it on Person B's upper arm.
+
+# Optional [x, y, width, height] in start-frame pixels for the QA table crop.
+table_bbox: null
+
+seeds:
+  start: [61001, 61011, 61021, 61031]
+  end: [62011, 62021]
+  video: [64001]
