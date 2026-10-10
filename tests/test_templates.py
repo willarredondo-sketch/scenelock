@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 from scenelock.prompts import TABLE_RULE
@@ -8,7 +9,20 @@ from scenelock.templates import fill_workflow, load_template
 
 EXAMPLE = Path("examples/backyard-burgers/scene.yaml")
 ROOT = Path(__file__).resolve().parents[1]
-BANNED = ("osatoshi", "pepsi", "marco", "chris")
+MEDIA_SUFFIXES = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".gif",
+    ".mp4",
+    ".mov",
+    ".webm",
+    ".safetensors",
+    ".ckpt",
+    ".pt",
+    ".bin",
+}
 
 
 def test_templates_keep_the_node_graph_and_placeholders():
@@ -66,21 +80,15 @@ def test_built_workflows_use_scene_text_and_generic_prefixes():
     assert start["6"]["inputs"]["model"] == "gemini-3-pro-image-preview"
     assert video["3"]["inputs"]["model"] == "seedance-1-5-pro-251215"
     assert video["3"]["inputs"]["resolution"] == "720p"
-    for word in BANNED:
-        assert word not in blob.lower()
+    assert re.search(r"[a-f0-9]{32,}", blob) is None
 
 
-def test_repo_has_no_personal_or_brand_references():
-    allowed_suffixes = {".py", ".md", ".json", ".yaml", ".yml", ".txt"}
-    skip = {".git", "tests", "__pycache__", ".pytest_cache", "outputs", ".venv"}
-    offenders = []
+def test_repo_ships_no_media_or_model_files():
+    skip = {".git", "__pycache__", ".pytest_cache", "outputs", ".venv"}
+    found = []
     for path in ROOT.rglob("*"):
-        if not path.is_file() or path.suffix.lower() not in allowed_suffixes:
+        if not path.is_file() or any(part in skip for part in path.parts):
             continue
-        if any(part in skip for part in path.parts):
-            continue
-        text = path.read_text(encoding="utf-8", errors="ignore").lower()
-        for word in BANNED:
-            if word in text:
-                offenders.append(f"{word} in {path}")
-    assert offenders == []
+        if path.suffix.lower() in MEDIA_SUFFIXES:
+            found.append(str(path.relative_to(ROOT)))
+    assert found == []

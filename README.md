@@ -9,7 +9,7 @@ SceneLock is an open-source rebuild of paid character-consistency and keyframe-t
 3. **First/last-frame video.** `ByteDanceFirstLastFrameNode` (`seedance-1-5-pro-251215`) between those stills. The template locks the camera. The example scene is 8 seconds at 720p, 9:16.
 4. **QA.** ffmpeg grabs frames. A contact sheet and 2x crops are written for a person to review. An optional vision-model reviewer can flag defects. It does not decide.
 
-This is a work-in-progress entry for the [Comfy Dev Platform Challenge](https://blog.comfy.org/p/open-call-comfy-dev-platform-challenge) (deadline 2026-10-19 9am PT). The workflows match graphs that were run on Comfy Cloud. This tree has not been executed against the live API.
+This is a work-in-progress entry for the [Comfy Dev Platform Challenge](https://blog.comfy.org/p/open-call-comfy-dev-platform-challenge) (deadline 2026-10-19 9am PT). You bring consented reference photos. The tool makes a start frame, edits that frame into an end frame with the scene locked, animates between those two frames, then writes QA notes for a person to sign off. A live end-to-end Comfy Cloud run of this repo is still pending.
 
 ```mermaid
 flowchart LR
