@@ -1,0 +1,32 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{START_FRAME_IMAGE}}"
+    }
+  },
+  "2": {
+    "class_type": "ByteDanceImageToVideoNode",
+    "inputs": {
+      "model": "{{VIDEO_MODEL}}",
+      "prompt": "{{VIDEO_PROMPT}}",
+      "image": ["1", 0],
+      "resolution": "{{VIDEO_RESOLUTION}}",
+      "aspect_ratio": "{{ASPECT_RATIO}}",
+      "duration": "{{DURATION}}",
+      "seed": "{{SEED}}",
+      "camera_fixed": true,
+      "watermark": false,
+      "generate_audio": false
+    }
+  },
+  "3": {
+    "class_type": "SaveVideo",
+    "inputs": {
+      "filename_prefix": "{{FILENAME_PREFIX}}",
+      "format": "mp4",
+      "codec": "auto",
+      "video": ["2", 0]
+    }
+  }
+}

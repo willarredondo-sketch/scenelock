@@ -1,0 +1,53 @@
+{
+  "1": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{LOCATION_IMAGE}}"
+    }
+  },
+  "2": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{PERSON_A_IMAGE}}"
+    }
+  },
+  "3": {
+    "class_type": "LoadImage",
+    "inputs": {
+      "image": "{{PERSON_B_IMAGE}}"
+    }
+  },
+  "4": {
+    "class_type": "ImageBatch",
+    "inputs": {
+      "image1": ["1", 0],
+      "image2": ["2", 0]
+    }
+  },
+  "5": {
+    "class_type": "ImageBatch",
+    "inputs": {
+      "image1": ["4", 0],
+      "image2": ["3", 0]
+    }
+  },
+  "6": {
+    "class_type": "GeminiImage2Node",
+    "inputs": {
+      "prompt": "{{START_PROMPT}}",
+      "model": "{{IMAGE_MODEL}}",
+      "seed": "{{SEED}}",
+      "aspect_ratio": "{{ASPECT_RATIO}}",
+      "resolution": "{{IMAGE_RESOLUTION}}",
+      "response_modalities": "IMAGE",
+      "images": ["5", 0]
+    }
+  },
+  "7": {
+    "class_type": "SaveImage",
+    "inputs": {
+      "filename_prefix": "{{FILENAME_PREFIX}}",
+      "images": ["6", 0]
+    }
+  }
+}

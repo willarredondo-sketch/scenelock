@@ -72,6 +72,9 @@ dmypy.json
 # Jupyter
 .ipynb_checkpoints
 
+# Gradio
+.gradio/
+
 # Project
 outputs/
 refs/
