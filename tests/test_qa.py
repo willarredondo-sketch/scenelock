@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from qa.check import contact_sheet, run_qa, ssim_score
+from qa.check import align_frame_to_still, contact_sheet, mean_abs_diff, run_qa, ssim_score
 from scenelock.scene import load_scene
 
 EXAMPLE = Path("examples/backyard-burgers/scene.yaml")
@@ -16,6 +16,47 @@ def test_ssim_is_one_for_the_same_image():
     assert ssim_score(image, image) == pytest.approx(1.0)
     other = Image.new("RGB", (32, 48), (20, 20, 180))
     assert ssim_score(image, other) < 0.8
+
+
+def test_alignment_undoes_a_small_vertical_stretch():
+    # Thin horizontal stripes make a ~3% vertical shift obvious. The frame is the
+    # inverse of a 1.03 width-fit: pad, scale to the video size, so alignment
+    # at 1.03 centre-crops back to the still and a plain resize does not.
+    still = _striped((160, 284))
+    frame_size = (150, 273)
+    vertical = 1.03
+    # Same height the aligner will produce at this scale, before the centre crop.
+    content_h = int(round(frame_size[1] * (still.width / frame_size[0]) * vertical))
+    assert content_h > still.height
+    distorted = _inverse_of_vertical_scale(still, frame_size, content_h)
+    naive = distorted.resize(still.size, Image.Resampling.LANCZOS)
+    aligned, scale = align_frame_to_still(still, distorted)
+    assert aligned.size == still.size
+    assert scale == 1.03
+    assert mean_abs_diff(still, aligned) < mean_abs_diff(still, naive)
+
+
+def _striped(size: tuple[int, int]) -> Image.Image:
+    image = Image.new("RGB", size)
+    pixels = image.load()
+    width, height = size
+    for y in range(height):
+        color = ((y * 37) % 256, (y * 17) % 256, (y * 53) % 256)
+        for x in range(width):
+            pixels[x, y] = color
+    return image
+
+
+def _inverse_of_vertical_scale(
+    still: Image.Image, frame_size: tuple[int, int], content_h: int
+) -> Image.Image:
+    """Build a frame that `_resize_with_vertical_scale(..., vertical)` turns back into `still`."""
+    frame_w, frame_h = frame_size
+    pad = content_h - still.height
+    top_pad = pad // 2
+    canvas = Image.new("RGB", (still.width, content_h), (0, 0, 0))
+    canvas.paste(still, (0, top_pad))
+    return canvas.resize((frame_w, frame_h), Image.Resampling.LANCZOS)
 
 
 def test_contact_sheet_and_notes(tmp_path):

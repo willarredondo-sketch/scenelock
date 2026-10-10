@@ -22,8 +22,10 @@ def build_start_prompt(scene: Scene) -> tuple[str, list[str]]:
         f"{people} "
         f"{scene.start_pose} "
         "Nobody is mid-bite, and nobody has both hands on the held object. "
-        "Keep the held object in one hand for the whole still and gesture with the free hand. "
-        f"Locked table layout: {_lock_list(scene)}. Nothing else on the table. "
+        "Each person holds exactly one held object in exactly one hand, not in both hands. "
+        "Keep that object in one hand for the whole still and gesture with the free hand. "
+        f"Locked table layout, with exact counts: {_lock_list(scene)}. "
+        "If the list says one of an object, draw one, not two. Nothing else on the table. "
         f"{TABLE_RULE} "
         "No alcohol. Faces match the references. Natural anatomy, five separate fingers, "
         "no extra or fused fingers, no duplicate objects. "
@@ -39,8 +41,9 @@ def build_end_prompt(scene: Scene) -> tuple[str, list[str]]:
         "Edit this photo. Keep the camera, framing, background, lighting, wardrobe, "
         "seating, faces, and identities identical. "
         f"{_seat_line(scene)} Do not swap their seats. "
+        f"{_reach_line(scene)} "
         "Table must stay identical. "
-        f"Locked table layout: {_lock_list(scene)}. {TABLE_RULE} "
+        f"Locked table layout, with exact counts: {_lock_list(scene)}. {TABLE_RULE} "
         f"Change only poses and expressions: {scene.end_pose} "
         "Each person still holds the same object in the same one hand, low and away from the mouth, "
         "and gestures with the free hand. "
@@ -63,7 +66,8 @@ def build_video_prompt(scene: Scene) -> tuple[str, list[str]]:
         "Movements are slow and small. "
         "Each person keeps the held object in the same one hand for the whole clip and gestures with the free hand. "
         "Hands stay away from faces and necks. Closed-mouth smiles only. "
-        f"The table stays completely unchanged: {_lock_list(scene)}. "
+        "No new accessories or props. Do not add a wristwatch, jewelry, or any object that is not in the start and end frames. "
+        f"The table stays completely unchanged, with the same exact counts: {_lock_list(scene)}. "
         "Natural hands with five fingers, no morphing, no extra hands. Faces stay consistent."
     )
     return prompt, warnings
@@ -92,9 +96,22 @@ def pose_warnings(text: str, stage: str) -> list[str]:
 def _person_clause(scene: Scene, reference_index: int, character) -> str:
     free = "right" if character.held_hand == "left" else "left"
     return (
-        f"{character.name} (reference image {reference_index}) is on the {character.slot} and holds "
-        f"{character.held_object} in the {character.held_hand} hand only, low near the plate, not at the mouth. "
-        f"The {free} hand is empty and free to gesture."
+        f"{character.name} (reference image {reference_index}), {character.who()} on the {character.slot}, holds "
+        f"exactly one {character.held_object} in the {character.held_hand} hand only, low near the plate, not at the mouth. "
+        f"The {free} hand is empty and free to gesture. Do not put both hands on the {character.held_object}."
+    )
+
+
+def _reach_line(scene: Scene) -> str:
+    """Name who reaches and who is touched, by appearance and seat, so the edit cannot swap them."""
+    actor = scene.characters[0]
+    target = scene.characters[1]
+    free = "right" if actor.held_hand == "left" else "left"
+    return (
+        f"{actor.who()} on the {actor.slot} places their {free} hand on the upper arm of "
+        f"{target.who()} on the {target.slot}. "
+        f"{target.who()} on the {target.slot} keeps their hands on the plate. "
+        "Do not swap who touches whom."
     )
 
 

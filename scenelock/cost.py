@@ -12,8 +12,9 @@ from dataclasses import dataclass
 # Flat per-image approximation for a Nano Banana Pro / Gemini image node.
 IMAGE_CREDITS = 36
 
-# Two known points for Seedance 1.5 Pro at 720p. Other durations are interpolated.
-VIDEO_CREDITS_AT_5S = 27
+# Seedance 1.5 Pro at 720p, no audio. 5s is the 2026-10-10 measured charge.
+# 8s is still an approximation. Other durations are interpolated between them.
+VIDEO_CREDITS_AT_5S = 27.57
 VIDEO_CREDITS_AT_8S = 44
 
 PRICING_NOTE = (
@@ -67,7 +68,7 @@ def image_line(stage: str, count: int) -> CostLine:
         label=f"{stage} frame (Nano Banana Pro image)",
         count=count,
         credits_each=IMAGE_CREDITS,
-        note="flat ~36 per image; resolution does not change this estimate",
+        note="flat ~36 per image; a 2026-10-10 1K run charged 35.95 and 35.28",
     )
 
 
@@ -83,9 +84,9 @@ def video_line(duration: int, count: int = 1) -> CostLine:
 
 def video_credits(duration: int) -> tuple[float, str]:
     if duration == 5:
-        return float(VIDEO_CREDITS_AT_5S), "listed approximation for 5s"
+        return float(VIDEO_CREDITS_AT_5S), "measured 2026-10-10, 720p, no audio"
     if duration == 8:
-        return float(VIDEO_CREDITS_AT_8S), "listed approximation for 8s"
+        return float(VIDEO_CREDITS_AT_8S), "listed approximation for 8s; that run was 5s"
     # Linear between the two listed points. Outside 5-8s this is an extrapolation.
     credits = VIDEO_CREDITS_AT_5S + (duration - 5) * (VIDEO_CREDITS_AT_8S - VIDEO_CREDITS_AT_5S) / 3
     if 5 < duration < 8:
@@ -114,6 +115,7 @@ def estimate_run(start_count: int, end_count: int, duration: int) -> CostEstimat
 
 
 def format_credits(value: float) -> str:
-    if float(value).is_integer():
-        return str(int(value))
-    return f"{value:.1f}"
+    rounded = round(float(value), 2)
+    if rounded == int(rounded):
+        return str(int(rounded))
+    return f"{rounded:.2f}"

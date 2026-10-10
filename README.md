@@ -9,7 +9,9 @@ SceneLock is an open-source rebuild of paid character-consistency and keyframe-t
 3. **First/last-frame video.** `ByteDanceFirstLastFrameNode` (`seedance-1-5-pro-251215`) between those stills. The template locks the camera. The example scene is 8 seconds at 720p, 9:16.
 4. **QA.** ffmpeg grabs frames. A contact sheet and 2x crops are written for a person to review. An optional vision-model reviewer can flag defects. It does not decide.
 
-This is a work-in-progress entry for the [Comfy Dev Platform Challenge](https://blog.comfy.org/p/open-call-comfy-dev-platform-challenge) (deadline 2026-10-19 9am PT). You bring consented reference photos. The tool makes a start frame, edits that frame into an end frame with the scene locked, animates between those two frames, then writes QA notes for a person to sign off. A live end-to-end Comfy Cloud run of this repo is still pending.
+This is a work-in-progress entry for the [Comfy Dev Platform Challenge](https://blog.comfy.org/p/open-call-comfy-dev-platform-challenge) (deadline 2026-10-19 9am PT). You bring consented reference photos. The tool makes a start frame, edits that frame into an end frame with the scene locked, animates between those two frames, then writes QA notes for a person to sign off.
+
+One live end-to-end Comfy Cloud run finished on 2026-10-10 using CC0 Wikimedia photos. It spent **98.80** credits: start frame 35.95, end-frame edit 35.28, Seedance 5s 720p video 27.57. Dashboard live buttons, 6–8s clips, and 2K stills were not part of that run.
 
 ```mermaid
 flowchart LR
@@ -76,7 +78,7 @@ Opens at `http://127.0.0.1:7860`. The spend checkbox is the dashboard's `--yes`.
 | Field | Role |
 | --- | --- |
 | `refs.location` | Location photo. Reference image 1 in the start prompt. |
-| `characters` | Two people. List order is reference image 2, then 3. `slot` is left or right and is repeated in the end prompt. |
+| `characters` | Two people. List order is reference image 2, then 3. `slot` is left or right. Optional `appearance` (for example "the man") is how the end prompt names who reaches. The first character is the one who places a hand; the second keeps their hands on the plate. |
 | `held_object`, `held_hand` | The object stays in that one hand. The other hand gestures. |
 | `table_lock` | Props that must not change. Injected into the start prompt, the end prompt, and the video prompt. |
 | `start_pose`, `end_pose`, `motion_beat` | What the people do. Guardrails are added around this text. |
@@ -91,6 +93,8 @@ Quote `aspect_ratio`. Unquoted `9:16` is not a string in YAML.
 ## Architecture
 
 ComfyUI API-format templates live in `workflows/`. The runner replaces `{{PLACEHOLDERS}}` and submits the graph.
+
+`ImageBatch` centre-crops later images to the first image's size. Before the start-frame graph is submitted, character photos are letterboxed onto the location canvas so a face at the top of a tall portrait is not cut off. The fit pads; it does not crop.
 
 | Call | Use |
 | --- | --- |
@@ -123,10 +127,10 @@ Printed estimates use these approximations. They are not fetched from the accoun
 | Step | Approximate credits |
 | --- | --- |
 | Nano Banana Pro image (each start or end frame) | ~36 |
-| Seedance 1.5 Pro, 720p, 5s | ~27 |
+| Seedance 1.5 Pro, 720p, 5s, no audio | 27.57 |
 | Seedance 1.5 Pro, 720p, 8s | ~44 |
 
-6s and 7s are a straight interpolation of the 5s and 8s figures (~32.7 and ~38.3). Anything outside 5–8s is marked as extrapolated. A 4-start, 4-end, one 8s video dry-run prints **~332**.
+The 5s figure is the charge from the 2026-10-10 run. The same run's 1K stills were 35.95 and 35.28, so the image line stays a flat ~36. 8s was not measured. 6s and 7s are a straight interpolation of 27.57 and 44 (~33.05 and ~38.52). Anything outside 5–8s is marked as extrapolated. A 4-start, 4-end, one 8s video dry-run prints **~332**.
 
 Partner-node rates: [Comfy partner node pricing](https://docs.comfy.org/tutorials/partner-nodes/pricing).
 
@@ -136,14 +140,16 @@ The prompt builders add these on every run. If your pose text fights them, the C
 
 - Do not start a character mid-action (for example mid-bite, or both hands on the object). Hands melt when the model has to let go. Keep the held object in one hand for the whole clip and gesture with the free hand.
 - Make the end frame an edit of the chosen start frame, not a new generation. That is what keeps the table identical. The `table_lock` list is repeated, with the sentence "Do not add, remove, move, resize or relabel any object."
-- Keep each person's seat the same in the start prompt and the end prompt. The end prompt says not to swap seats.
+- Keep each person's seat the same in the start prompt and the end prompt. The end prompt names who reaches and who is touched, by appearance and seat, and says not to swap them. The first character places their free hand on the second character's upper arm. The second character's hands stay on the plate.
+- Object counts are exact. "Exactly one ketchup cup" means one, not two. Each burger stays in one hand.
+- The video prompt says no new accessories or props, so a wristwatch cannot appear mid-clip.
 - Static camera, in the prompt and as `camera_fixed: true` on the video node. Put the key gesture at about 70% of the clip so it lands before the end frame. Keep motion slow and small. Prefer closed-mouth smiles (open laughing mouths fuse teeth). Keep hands away from faces and necks.
 - Pick an end pose that is physically reachable. A hand may rest on the upper arm or shoulder, not the neck.
 - Video-review models hallucinate extra limbs from motion blur. QA writes flags into `QA_NOTES.md` with an empty **CONFIRMED / NOT FOUND** column. A human checks the full-res frame grabs and decides. The reviewer hook is off unless you pass `--reviewer package.module:ClassName`. A reviewer subclasses `qa.reviewer.VisionReviewer` and only returns flags.
 
 ## QA
 
-`python -m scenelock qa` uses ffmpeg to save the first frame, the last frame, and frames at `--interval` seconds (default 1). It builds `contact_sheet.jpg`, writes 2x zoom crops (MediaPipe hands when that package imports, otherwise the centre of the frame), and compares the first and last video frames to the start and end stills. With `table_bbox` set, that comparison is the table crop. SSIM under 0.8, or a mean absolute grayscale difference above 12, is labeled possible prop drift. Flat areas can keep a high SSIM while the color changes, which is why both numbers are there. They are heuristics, not a measured error rate.
+`python -m scenelock qa` uses ffmpeg to save the first frame, the last frame, and frames at `--interval` seconds (default 1). It builds `contact_sheet.jpg`, writes 2x zoom crops (MediaPipe hands when that package imports, otherwise the centre of the frame), and compares the first and last video frames to the start and end stills. Before scoring, the video frame is resized onto the still and a vertical scale from 0.97 to 1.05 is searched, because Seedance 720p is a slightly different aspect and stretches the picture by about 2%. With `table_bbox` set, that comparison is the table crop on the aligned frames. SSIM under 0.8, or a mean absolute grayscale difference above 12, is labeled possible prop drift. Flat areas can keep a high SSIM while the color changes, which is why both numbers are there. They are heuristics, not a measured error rate.
 
 ## Likeness and safety
 
@@ -157,13 +163,20 @@ pytest
 
 Template filling, scene parsing, prompt text, the cost gate, dry-run, and QA all run locally. Nothing in the tests calls Comfy Cloud.
 
-## What still needs a live key
+## What that live run confirmed, and what is still open
 
-- `POST /api/upload/image` returning a `name` the `LoadImage` node accepts
-- `GET /api/history_v2/{prompt_id}` while a job is queued, and the output key `SaveVideo` actually uses (`videos`, `images`, or `gifs` are all read)
-- Real credit charges versus the table above
-- The image node at `1K` (the captured graph sent `2K`) and Seedance first/last-frame at 6–8s
+Confirmed on 2026-10-10 (CC0 Wikimedia photos, 98.80 credits, three submits, no retries):
+
+- `POST /api/upload/image` returns a content-addressed name that `LoadImage` accepts. The downloaded file matched the uploaded bytes.
+- `GeminiImage2Node` at `1K` produced the start frame (35.95 credits) and the end-frame edit (35.28).
+- `SaveVideo` output was listed in history and downloaded. The 5s 720p clip, audio off, cost 27.57 credits.
+- `GET /api/history_v2/{prompt_id}` returns 404 while the job is queued or running. The client treats that 404 as still running. The same prompt id is billed even if a later poll fails, and the ledger records it at submit time.
+
+Still open:
+
 - Dashboard buttons that submit, the variation grid, and playback
+- 6–8s clips and `2K` stills
+- More than one seed in a single stage
 
 `/api/history_v2/{prompt_id}` is the ComfyUI-compatible poll used here. Cloud docs also list `/api/jobs/{job_id}` for the same id.
 
