@@ -142,8 +142,22 @@ def ssim_score(left: Image.Image, right: Image.Image) -> float:
 
 
 def mean_abs_diff(left: Image.Image, right: Image.Image) -> float:
-    """Mean absolute difference on the same grayscale pair, 0 to 255."""
+    """Mean absolute difference on a shared 128px grayscale pair, 0 to 255.
+
+    The flag threshold is calibrated on this size. Alignment search uses
+    `_native_mae` instead, because squashing to a square hides a small stretch.
+    """
     a, b = _gray_pair(left, right)
+    return sum(abs(pixel_a - pixel_b) for pixel_a, pixel_b in zip(a, b)) / len(a)
+
+
+def _native_mae(left: Image.Image, right: Image.Image) -> float:
+    """Mean absolute difference after both images share `left`'s size, 0 to 255."""
+    size = left.size
+    if right.size != size:
+        right = right.resize(size, Image.Resampling.LANCZOS)
+    a = list(left.convert("L").tobytes())
+    b = list(right.convert("L").tobytes())
     return sum(abs(pixel_a - pixel_b) for pixel_a, pixel_b in zip(a, b)) / len(a)
 
 
@@ -246,17 +260,63 @@ class FrameDiff:
         return self.ssim < SSIM_FLAG_BELOW or self.mae > MAE_FLAG_ABOVE
 
 
+# Seedance 720p output is a slightly different aspect from a 1K 9:16 still and
+# stretches the picture by about 2% vertically. Search a small band around that.
+VERTICAL_SCALES = [step / 100 for step in range(97, 106)]
+
+
+def align_frame_to_still(still: Image.Image, frame: Image.Image) -> tuple[Image.Image, float]:
+    """Resize the video frame onto the still, undoing a small vertical stretch.
+
+    Returns the aligned frame (same size as the still) and the vertical scale
+    that scored the lowest mean absolute difference.
+    """
+    best_image = frame
+    best_scale = 1.0
+    best_mae: float | None = None
+    for scale in VERTICAL_SCALES:
+        candidate = _resize_with_vertical_scale(frame, still.size, scale)
+        # Score at the still's own size. A 128px square hides a ~2% vertical shift.
+        score = _native_mae(still, candidate)
+        if best_mae is None or score < best_mae:
+            best_mae = score
+            best_image = candidate
+            best_scale = scale
+    return best_image, best_scale
+
+
+def _resize_with_vertical_scale(
+    frame: Image.Image, target_size: tuple[int, int], vertical_scale: float
+) -> Image.Image:
+    """Match the still's width, apply a vertical scale, then centre-crop or pad to its height."""
+    target_w, target_h = target_size
+    width_scale = target_w / frame.width
+    new_w = target_w
+    new_h = max(1, int(round(frame.height * width_scale * vertical_scale)))
+    resized = frame.resize((new_w, new_h), Image.Resampling.LANCZOS)
+    if new_h == target_h:
+        return resized
+    if new_h > target_h:
+        top = (new_h - target_h) // 2
+        return resized.crop((0, top, target_w, top + target_h))
+    canvas = Image.new("RGB", target_size)
+    top = (target_h - new_h) // 2
+    canvas.paste(resized, (0, top))
+    return canvas
+
+
 def _compare(still_path: Path, frame_path: Path, scene: Scene) -> FrameDiff:
     still = Image.open(still_path).convert("RGB")
     frame = Image.open(frame_path).convert("RGB")
+    frame, scale = align_frame_to_still(still, frame)
     if scene.table_bbox:
         still_crop = _crop_bbox(still, scene.table_bbox, still.size)
         frame_crop = _crop_bbox(frame, scene.table_bbox, still.size)
-        region = "table bbox"
+        region = f"table bbox after vertical scale {scale:.2f}"
     else:
         still_crop = still
         frame_crop = frame
-        region = "full frame (no table_bbox in the scene)"
+        region = f"full frame after vertical scale {scale:.2f}"
     return FrameDiff(ssim_score(still_crop, frame_crop), mean_abs_diff(still_crop, frame_crop), region)
 
 

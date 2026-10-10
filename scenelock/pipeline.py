@@ -9,7 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from scenelock.client import ComfyClient, ComfyError
-from scenelock.cost import CostEstimate, SpendRequired, estimate_run, estimate_stage
+from scenelock.cost import CostEstimate, SpendRequired, estimate_run, estimate_stage, format_credits
+from scenelock.fit import fit_character_refs
 from scenelock.prompts import build_end_prompt, build_start_prompt, build_video_prompt
 from scenelock.scene import Scene, output_dir_for, seeds_for
 from scenelock.templates import fill_workflow, load_template
@@ -71,6 +72,8 @@ def run_start(
     output: str | Path | None = None,
     client: ComfyClient | None = None,
 ) -> StageResult:
+    destination = output_dir_for(scene, output)
+    scene = fit_character_refs(scene, destination / "fitted")
     seeds = seeds_for(scene, "start", count)
     workflows = []
     warnings: list[str] = list(scene.warnings)
@@ -326,12 +329,21 @@ def _finish(
     print(estimate.format(), flush=True)
     print(f"Submitting {stage}.", flush=True)
     api = client or ComfyClient.from_env()
-    files, prompt_ids, submitted = _submit_all(api, destination, stage, seeds, workflows)
-    _record(destination, stage, seeds, estimate, prompt_ids)
+    credits_each = estimate.lines[0].credits_each if estimate.lines else estimate.total
+    files, prompt_ids, submitted = _submit_all(
+        api, destination, stage, seeds, workflows, credits_each
+    )
     return StageResult(stage, True, estimate, submitted, files, unique_warnings, prompt_ids, seeds)
 
 
-def _submit_all(client: ComfyClient, destination: Path, stage: str, seeds: list[int], workflows: list[dict]):
+def _submit_all(
+    client: ComfyClient,
+    destination: Path,
+    stage: str,
+    seeds: list[int],
+    workflows: list[dict],
+    credits_each: float,
+):
     cache: dict[str, str] = {}
     files: list[Path] = []
     prompt_ids: list[str] = []
@@ -339,13 +351,15 @@ def _submit_all(client: ComfyClient, destination: Path, stage: str, seeds: list[
     for seed, workflow in zip(seeds, workflows):
         prepared = _upload_load_images(client, workflow, cache)
         prompt_id = client.submit(prepared)
+        # Record the billed job before polling. A later 404 or download error must not drop it.
+        _write_workflows(destination / "submitted", stage, [seed], [prepared])
+        _record_job(destination, stage, seed, credits_each, prompt_id)
         prompt_ids.append(prompt_id)
         submitted.append(prepared)
         print(f"submitted {stage} seed {seed} prompt_id {prompt_id}", file=sys.stderr)
         remote_files = client.wait_for_files(prompt_id)
         saved = _download_outputs(client, remote_files, destination / stage, stage, seed)
         files.extend(saved)
-    _write_workflows(destination / "submitted", stage, seeds, submitted)
     return files, prompt_ids, submitted
 
 
@@ -383,7 +397,7 @@ def _write_workflows(directory: Path, stage: str, seeds: list[int], workflows: l
         path.write_text(json.dumps(workflow, indent=2) + "\n", encoding="utf-8")
 
 
-def _record(directory: Path, stage: str, seeds: list[int], estimate: CostEstimate, prompt_ids: list[str]) -> None:
+def _record_job(directory: Path, stage: str, seed: int, credits: float, prompt_id: str) -> None:
     path = directory / "ledger.json"
     if path.exists():
         data = json.loads(path.read_text(encoding="utf-8"))
@@ -392,10 +406,10 @@ def _record(directory: Path, stage: str, seeds: list[int], estimate: CostEstimat
     data["entries"].append(
         {
             "stage": stage,
-            "seeds": seeds,
-            "credits": estimate.total,
+            "seed": seed,
+            "credits": credits,
             "approximate": True,
-            "prompt_ids": prompt_ids,
+            "prompt_id": prompt_id,
         }
     )
     data["total_credits"] = sum(entry["credits"] for entry in data["entries"])
@@ -410,8 +424,8 @@ def ledger_text(directory: Path) -> str:
     data = json.loads(path.read_text(encoding="utf-8"))
     total = data.get("total_credits", 0)
     return (
-        f"Recorded approximate spend: ~{total} credits "
-        f"across {len(data.get('entries', []))} stage(s). Dry-runs are not included."
+        f"Recorded approximate spend: ~{format_credits(total)} credits "
+        f"across {len(data.get('entries', []))} submitted job(s). Dry-runs are not included."
     )
 
 

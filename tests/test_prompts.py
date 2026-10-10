@@ -22,9 +22,15 @@ def test_prompts_bake_in_the_run_lessons():
 
     assert start.startswith("Photorealistic")
     assert end.startswith("Edit this photo")
+    assert "exactly one" in start
+    assert "not two" in start
     assert "Person A stays on the left." in end
     assert "Person B stays on the right." in end
     assert "Do not swap their seats." in end
+    assert "the man on the left places their right hand on the upper arm of the woman on the right" in end
+    assert "Do not swap who touches whom." in end
+    assert "the man on the left places his right hand" in end
+    assert "the woman's hands stay on her plate" in end
     assert "upper arm or shoulder" in end
     assert "never the neck" in end
     assert "Closed-mouth smiles" in end
@@ -33,6 +39,7 @@ def test_prompts_bake_in_the_run_lessons():
     assert "about 70%" in video
     assert "same one hand for the whole clip" in video
     assert "Hands stay away from faces and necks." in video
+    assert "No new accessories or props." in video
 
 
 def test_risky_pose_text_warns_but_stays_in_the_prompt():

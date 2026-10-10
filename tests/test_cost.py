@@ -2,12 +2,15 @@ from scenelock.cost import estimate_run, format_credits, video_credits
 
 
 def test_listed_and_interpolated_video_credits():
-    assert video_credits(5) == (27.0, "listed approximation for 5s")
-    assert video_credits(8) == (44.0, "listed approximation for 8s")
+    credits_5, note_5 = video_credits(5)
+    assert credits_5 == 27.57
+    assert "2026-10-10" in note_5
+    assert video_credits(8)[0] == 44.0
     credits, note = video_credits(6)
-    assert credits == 27 + (44 - 27) / 3
+    assert credits == 27.57 + (44 - 27.57) / 3
     assert "interpolated" in note
-    assert format_credits(credits) == "32.7"
+    assert format_credits(credits) == "33.05"
+    assert format_credits(27.57) == "27.57"
 
 
 def test_run_estimate_uses_the_flat_image_rate():

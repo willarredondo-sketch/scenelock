@@ -114,7 +114,35 @@ def test_live_start_uploads_then_submits_remote_names(tmp_path, monkeypatch):
     assert result.files[0].is_file()
     ledger = json.loads((tmp_path / "out" / "ledger.json").read_text())
     assert ledger["total_credits"] == 36
-    assert ledger["entries"][0]["prompt_ids"] == ["prompt-1"]
+    assert ledger["entries"][0]["prompt_id"] == "prompt-1"
+    assert (tmp_path / "out" / "submitted").is_dir()
+
+
+def test_ledger_keeps_a_job_when_polling_fails(tmp_path, monkeypatch):
+    monkeypatch.delenv("COMFY_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("network")),
+    )
+    refs = tmp_path / "refs"
+    refs.mkdir()
+    for name in ("location.png", "person_a.png", "person_b.png"):
+        Image.new("RGB", (8, 12), "gray").save(refs / name)
+    scene_path = tmp_path / "scene.yaml"
+    scene_path.write_text(Path(EXAMPLE).read_text(encoding="utf-8"), encoding="utf-8")
+    from scenelock.client import ComfyError
+    from scenelock.scene import load_scene
+
+    class FailPoll(FakeClient):
+        def wait_for_files(self, prompt_id):
+            raise ComfyError("history failed after submit")
+
+    with pytest.raises(ComfyError, match="history failed"):
+        run_start(load_scene(scene_path), 1, False, True, tmp_path / "out", client=FailPoll())
+    ledger = json.loads((tmp_path / "out" / "ledger.json").read_text())
+    assert ledger["entries"][0]["prompt_id"] == "prompt-1"
+    assert ledger["entries"][0]["credits"] == 36
+    assert list((tmp_path / "out" / "submitted").glob("start_s*.json"))
 
 
 def test_yes_without_key_does_not_call_the_network(tmp_path, capsys, monkeypatch):

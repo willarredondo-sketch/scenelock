@@ -80,6 +80,34 @@ def test_history_parser_and_wait():
     assert files[0]["filename"] == "clip.mp4"
 
 
+def test_history_404_means_still_running_then_succeeds():
+    payload = {
+        "pid": {
+            "status": {"status_str": "success", "completed": True},
+            "outputs": {"7": {"images": [{"filename": "still.png", "subfolder": "", "type": "output"}]}},
+        }
+    }
+    calls = {"n": 0}
+
+    def opener(request, timeout=None):
+        assert "/api/history_v2/pid" in request.full_url
+        calls["n"] += 1
+        if calls["n"] == 1:
+            body = b'{"code":"NOT_FOUND","message":"History not found for this prompt"}'
+            return Response(body, 404)
+        return Response(json.dumps(payload).encode(), 200)
+
+    client = ComfyClient("secret-key", opener=opener, poll_interval=0, poll_timeout=5)
+    status, pending = client.history("pid")
+    assert status == 404
+    assert pending["code"] == "NOT_FOUND"
+    # history() above consumed the 404. The wait starts a new client so the first poll is 404.
+    calls["n"] = 0
+    files = client.wait_for_files("pid")
+    assert calls["n"] == 2
+    assert files[0]["filename"] == "still.png"
+
+
 def test_failed_job_raises():
     def opener(request, timeout=None):
         body = {"pid": {"status": {"status_str": "error", "completed": False}, "outputs": {}}}

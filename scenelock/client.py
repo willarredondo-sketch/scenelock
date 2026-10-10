@@ -91,7 +91,13 @@ class ComfyClient:
         return str(prompt_id)
 
     def history(self, prompt_id: str) -> tuple[int, dict]:
-        return self._json_status("GET", f"/api/history_v2/{urllib.parse.quote(prompt_id)}", timeout=30)
+        # Cloud returns 404 until the job finishes. That is "still running", not a failure.
+        return self._json_status(
+            "GET",
+            f"/api/history_v2/{urllib.parse.quote(prompt_id)}",
+            timeout=30,
+            ok=(200, 404),
+        )
 
     def wait_for_files(self, prompt_id: str) -> list[dict]:
         deadline = time.monotonic() + self.poll_timeout

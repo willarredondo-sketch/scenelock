@@ -23,6 +23,11 @@ class Character:
     slot: str
     held_object: str
     held_hand: str
+    appearance: str = ""
+
+    def who(self) -> str:
+        """Seat-level description used in prompts. Falls back to the name."""
+        return self.appearance or self.name
 
 
 @dataclass
@@ -170,12 +175,14 @@ def _character(item: dict, base_dir: Path, index: int) -> Character:
             f"{name} needs held_object. The clip keeps that object in one hand "
             "and gestures with the free hand."
         )
+    appearance = str(item.get("appearance") or "").strip()
     return Character(
         name=name,
         image=_resolve(base_dir, item["image"]),
         slot=slot,
         held_object=held_object,
         held_hand=held_hand,
+        appearance=appearance,
     )
 
 
