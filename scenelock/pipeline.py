@@ -93,7 +93,7 @@ def run_start(
         yes,
         output,
         client,
-        image_paths=[scene.location_image, scene.characters[0].image, scene.characters[1].image],
+        image_paths=_reference_images(scene),
     )
 
 
@@ -190,11 +190,7 @@ def run_pipeline(
     if not yes:
         raise SpendRequired(estimate)
     _require_key(client)
-    missing = [
-        str(path)
-        for path in (scene.location_image, scene.characters[0].image, scene.characters[1].image)
-        if not path.is_file()
-    ]
+    missing = [str(path) for path in _reference_images(scene) if not path.is_file()]
     if missing:
         raise ComfyError("Missing image files:\n" + "\n".join(missing))
     print(estimate.format(), flush=True)
@@ -227,22 +223,34 @@ def run_pipeline(
 
 
 def build_start_workflow(scene: Scene, seed: int) -> tuple[dict, list[str]]:
+    """Fill the start graph. Location is reference 1; people follow in list order.
+
+    One person uses start_frame_1p.json so GeminiImage2Node receives a two-image
+    batch (location, then the person) and nothing else. Two people keep the
+    original three-image graph.
+    """
     prompt, warnings = build_start_prompt(scene)
-    workflow = fill_workflow(
-        load_template("start_frame.json"),
-        {
-            "LOCATION_IMAGE": str(scene.location_image),
-            "PERSON_A_IMAGE": str(scene.characters[0].image),
-            "PERSON_B_IMAGE": str(scene.characters[1].image),
-            "START_PROMPT": prompt,
-            "IMAGE_MODEL": scene.image_model,
-            "SEED": seed,
-            "ASPECT_RATIO": scene.aspect_ratio,
-            "IMAGE_RESOLUTION": scene.image_resolution,
-            "FILENAME_PREFIX": f"scenelock/start_s{seed}",
-        },
-    )
+    values = {
+        "LOCATION_IMAGE": str(scene.location_image),
+        "PERSON_A_IMAGE": str(scene.characters[0].image),
+        "START_PROMPT": prompt,
+        "IMAGE_MODEL": scene.image_model,
+        "SEED": seed,
+        "ASPECT_RATIO": scene.aspect_ratio,
+        "IMAGE_RESOLUTION": scene.image_resolution,
+        "FILENAME_PREFIX": f"scenelock/start_s{seed}",
+    }
+    if len(scene.characters) == 1:
+        template = "start_frame_1p.json"
+    else:
+        template = "start_frame.json"
+        values["PERSON_B_IMAGE"] = str(scene.characters[1].image)
+    workflow = fill_workflow(load_template(template), values)
     return workflow, warnings
+
+
+def _reference_images(scene: Scene) -> list[Path]:
+    return [scene.location_image, *[character.image for character in scene.characters]]
 
 
 def build_end_workflow(scene: Scene, seed: int, start_image: Path) -> tuple[dict, list[str]]:

@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from scenelock.scene import SceneError, load_scene, seeds_for
+from scenelock.scene import SceneError, load_scene, scene_from_mapping, seeds_for
 
 EXAMPLE = Path("examples/backyard-burgers/scene.yaml")
 
@@ -30,15 +30,32 @@ def test_seeds_extend_when_count_is_larger():
     assert seeds_for(scene, "start", 5)[-1] == 61041
 
 
-def test_two_characters_required(tmp_path):
+def test_one_or_two_characters(tmp_path):
     text = EXAMPLE.read_text(encoding="utf-8")
     start = text.index("  - name: Person B")
     end = text.index("table_lock:")
-    broken = text[:start] + text[end:]
     path = tmp_path / "scene.yaml"
-    path.write_text(broken, encoding="utf-8")
-    with pytest.raises(SceneError, match="exactly two"):
+    path.write_text(text[:start] + text[end:], encoding="utf-8")
+    scene = load_scene(path)
+    assert [character.name for character in scene.characters] == ["Person A"]
+    assert scene.characters[0].slot == "left"
+
+    both_left = text.replace("slot: right", "slot: left")
+    path.write_text(both_left, encoding="utf-8")
+    with pytest.raises(SceneError, match="left and the other on the right"):
         load_scene(path)
+
+
+def test_character_count_rejects_zero_and_three():
+    with pytest.raises(SceneError, match="1 or 2"):
+        scene_from_mapping(_people(0), Path("."))
+    with pytest.raises(SceneError, match="1 or 2"):
+        scene_from_mapping(_people(3), Path("."))
+    solo = scene_from_mapping(_people(1, slot="right"), Path("."))
+    assert len(solo.characters) == 1
+    assert solo.characters[0].slot == "right"
+    pair = scene_from_mapping(_people(2), Path("."))
+    assert [character.slot for character in pair.characters] == ["left", "right"]
 
 
 def test_aspect_ratio_must_be_quoted(tmp_path):
@@ -60,3 +77,32 @@ def test_table_bbox_and_duration_warning(tmp_path):
     assert parsed.duration == 5
     assert any("6-8" in warning for warning in parsed.warnings)
     assert scene.duration == 8
+
+
+def _people(count: int, slot: str = "left") -> dict:
+    characters = []
+    for index in range(count):
+        if count == 1:
+            seat = slot
+        else:
+            seat = "left" if index % 2 == 0 else "right"
+        characters.append(
+            {
+                "name": f"Person {index + 1}",
+                "image": f"person_{index + 1}.png",
+                "slot": seat,
+                "held_object": "a mug",
+                "held_hand": "right",
+            }
+        )
+    return {
+        "title": "Count",
+        "setting": "a room",
+        "start_pose": "sitting up",
+        "end_pose": "sitting down",
+        "motion_beat": "settles back",
+        "duration": 8,
+        "refs": {"location": "location.png"},
+        "characters": characters,
+        "table_lock": ["exactly one mug"],
+    }

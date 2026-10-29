@@ -9,9 +9,11 @@ SceneLock is an open-source rebuild of paid character-consistency and keyframe-t
 3. **First/last-frame video.** `ByteDanceFirstLastFrameNode` (`seedance-1-5-pro-251215`) between those stills. The template locks the camera. The example scene is 8 seconds at 720p, 9:16.
 4. **QA.** ffmpeg grabs frames. A contact sheet and 2x crops are written for a person to review. An optional vision-model reviewer can flag defects. It does not decide.
 
-This is a work-in-progress entry for the [Comfy Dev Platform Challenge](https://blog.comfy.org/p/open-call-comfy-dev-platform-challenge) (deadline 2026-10-19 9am PT). You bring consented reference photos. The tool makes a start frame, edits that frame into an end frame with the scene locked, animates between those two frames, then writes QA notes for a person to sign off.
+This is a work-in-progress entry for the [Open Source Higgsfield challenge](https://comfy.org/open-source-higgsfield/) (deadline Fri 2026-10-30 9am PT). You bring photos of people who consented, or photos you have rights to. The tool makes a start frame, edits that frame into an end frame with the scene locked, animates between those two frames, then writes QA notes for a person to sign off.
 
-One live end-to-end Comfy Cloud run finished on 2026-10-10 using CC0 Wikimedia photos. It spent **98.80** credits: start frame 35.95, end-frame edit 35.28, Seedance 5s 720p video 27.57. Dashboard live buttons, 6–8s clips, and 2K stills were not part of that run.
+Generations go through Comfy Cloud partner nodes and need `COMFY_API_KEY`.
+
+One live end-to-end Comfy Cloud run finished on 2026-10-10 using CC0 Wikimedia photos. It spent **98.80** credits: start frame 35.95, end-frame edit 35.28, Seedance 5s 720p video 27.57. That run used two people. One-person mode is new and has not been validated in a live paid run. Dashboard live buttons, 6–8s clips, and 2K stills were not part of that run.
 
 ```mermaid
 flowchart LR
@@ -45,9 +47,10 @@ Dry-run fills the workflows and does not need photos or a key:
 
 ```bash
 python -m scenelock run --scene examples/backyard-burgers/scene.yaml --dry-run
+python -m scenelock run --scene examples/solo-portrait/scene.yaml --dry-run
 ```
 
-Copy that scene, point `refs` at consented photos, then:
+Copy one of those scenes, point `refs` at photos you have consent or rights to use, then:
 
 ```bash
 export COMFY_API_KEY=your-key
@@ -73,12 +76,12 @@ Opens at `http://127.0.0.1:7860`. The spend checkbox is the dashboard's `--yes`.
 
 ## Scene file
 
-`examples/backyard-burgers/scene.yaml` is the shape. You supply the photos. v0.1 expects a location plus two people, because that is the graph that ran.
+`examples/backyard-burgers/scene.yaml` is the two-person shape. `examples/solo-portrait/scene.yaml` is the one-person shape. You supply the photos. A scene is a location plus 1 or 2 people.
 
 | Field | Role |
 | --- | --- |
 | `refs.location` | Location photo. Reference image 1 in the start prompt. |
-| `characters` | Two people. List order is reference image 2, then 3. `slot` is left or right. Optional `appearance` (for example "the man") is how the end prompt names who reaches. The first character is the one who places a hand; the second keeps their hands on the plate. |
+| `characters` | 1 or 2 people. List order is reference image 2, then reference image 3 when a second person is present. `slot` is left or right. With two people, one sits left and one sits right. Optional `appearance` (for example "the man") is how the end prompt names who reaches. With two people, the first character is the one who places a hand; the second keeps their hands on the plate. With one person, the end frame is only a pose or position change, and identity, hair, and clothing stay the same unless `end_pose` explicitly changes them. |
 | `held_object`, `held_hand` | The object stays in that one hand. The other hand gestures. |
 | `table_lock` | Props that must not change. Injected into the start prompt, the end prompt, and the video prompt. |
 | `start_pose`, `end_pose`, `motion_beat` | What the people do. Guardrails are added around this text. |
@@ -96,6 +99,8 @@ ComfyUI API-format templates live in `workflows/`. The runner replaces `{{PLACEH
 
 `ImageBatch` centre-crops later images to the first image's size. Before the start-frame graph is submitted, character photos are letterboxed onto the location canvas so a face at the top of a tall portrait is not cut off. The fit pads; it does not crop.
 
+The two-person start graph batches the location, then person A, then person B. The one-person graph, `workflows/start_frame_1p.json`, batches the location and then the one person, so `GeminiImage2Node` sees reference image 1 as the location and reference image 2 as the person. The end-frame edit and first/last-frame video graphs are unchanged. They already take images.
+
 | Call | Use |
 | --- | --- |
 | `POST /api/upload/image` | Multipart upload. `LoadImage` receives the returned `name`. |
@@ -110,11 +115,11 @@ Base URL: `https://cloud.comfy.org`.
 ## Repo layout
 
 ```
-workflows/     start_frame.json, end_frame_edit.json, flf_video.json
+workflows/     start_frame.json (2 people), start_frame_1p.json (1 person), end_frame_edit.json, flf_video.json
 scenelock/     CLI and API client (`python -m scenelock`)
 qa/            ffmpeg frame grabs, crops, QA_NOTES.md
 app/           Gradio dashboard
-examples/      backyard-burgers scene, no photos
+examples/      backyard-burgers (2 people) and solo-portrait (1 person), no photos
 tests/         pytest, no network
 ```
 
@@ -140,7 +145,7 @@ The prompt builders add these on every run. If your pose text fights them, the C
 
 - Do not start a character mid-action (for example mid-bite, or both hands on the object). Hands melt when the model has to let go. Keep the held object in one hand for the whole clip and gesture with the free hand.
 - Make the end frame an edit of the chosen start frame, not a new generation. That is what keeps the table identical. The `table_lock` list is repeated, with the sentence "Do not add, remove, move, resize or relabel any object."
-- Keep each person's seat the same in the start prompt and the end prompt. The end prompt names who reaches and who is touched, by appearance and seat, and says not to swap them. The first character places their free hand on the second character's upper arm. The second character's hands stay on the plate.
+- With two people, keep each person's seat the same in the start prompt and the end prompt. The end prompt names who reaches and who is touched, by appearance and seat, and says not to swap them. The first character places their free hand on the second character's upper arm. The second character's hands stay on the plate. With one person, there is no second person and no hand-on-the-other's-arm rule. The end frame is a pose or position change (for example sitting up, then sitting down). Identity, hair, and clothing stay the same unless the end pose explicitly changes them.
 - Object counts are exact. "Exactly one ketchup cup" means one, not two. Each burger stays in one hand.
 - The video prompt says no new accessories or props, so a wristwatch cannot appear mid-clip.
 - Static camera, in the prompt and as `camera_fixed: true` on the video node. Put the key gesture at about 70% of the clip so it lands before the end frame. Keep motion slow and small. Prefer closed-mouth smiles (open laughing mouths fuse teeth). Keep hands away from faces and necks.
@@ -151,9 +156,9 @@ The prompt builders add these on every run. If your pose text fights them, the C
 
 `python -m scenelock qa` uses ffmpeg to save the first frame, the last frame, and frames at `--interval` seconds (default 1). It builds `contact_sheet.jpg`, writes 2x zoom crops (MediaPipe hands when that package imports, otherwise the centre of the frame), and compares the first and last video frames to the start and end stills. Before scoring, the video frame is resized onto the still and a vertical scale from 0.97 to 1.05 is searched, because Seedance 720p is a slightly different aspect and stretches the picture by about 2%. With `table_bbox` set, that comparison is the table crop on the aligned frames. SSIM under 0.8, or a mean absolute grayscale difference above 12, is labeled possible prop drift. Flat areas can keep a high SSIM while the color changes, which is why both numbers are there. They are heuristics, not a measured error rate.
 
-## Likeness and safety
+## Likeness and consent
 
-Only use reference photos of people who have consented. The repo ships no private likeness models and no personal photos. The example scene has no alcohol and no branded products. Do not put either into examples you commit.
+Only use photos of people who consented, or photos you have rights to. The repo ships no private likeness models and no personal photos. The example scenes have no alcohol and no branded products. Do not put either into examples you commit.
 
 ## Tests
 
@@ -174,6 +179,7 @@ Confirmed on 2026-10-10 (CC0 Wikimedia photos, 98.80 credits, three submits, no 
 
 Still open:
 
+- One-person start frames. The graph and prompts are covered by dry-run tests. One-person mode is new and has not been validated in a live paid run.
 - Dashboard buttons that submit, the variation grid, and playback
 - 6–8s clips and `2K` stills
 - More than one seed in a single stage
