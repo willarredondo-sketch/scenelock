@@ -108,15 +108,16 @@ def scene_from_mapping(data: dict, base_dir: Path) -> Scene:
     raw_characters = data.get("characters")
     if not isinstance(raw_characters, list):
         raise SceneError("characters must be a list")
-    if len(raw_characters) != 2:
+    if len(raw_characters) not in (1, 2):
         raise SceneError(
-            "v0.1 expects exactly two characters. The start-frame graph loads "
-            "a location photo plus two people."
+            "characters must list 1 or 2 people. The start-frame graph loads "
+            "a location photo plus one or two people."
         )
     characters = [_character(item, base_dir, index) for index, item in enumerate(raw_characters, start=1)]
-    slots = [character.slot for character in characters]
-    if sorted(slots) != ["left", "right"]:
-        raise SceneError("One character must sit on the left and the other on the right")
+    if len(characters) == 2:
+        slots = [character.slot for character in characters]
+        if sorted(slots) != ["left", "right"]:
+            raise SceneError("One character must sit on the left and the other on the right")
 
     table_lock = _table_lock(data.get("table_lock"))
     table_bbox = _bbox(data.get("table_bbox"))

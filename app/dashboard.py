@@ -28,13 +28,16 @@ def build_demo() -> gr.Blocks:
         gr.Markdown(
             "# SceneLock\n\n"
             "Turn reference photos into a start frame and an edited end frame, then a short clip between them.\n\n"
-            "Use photos of people who have consented. Dry-run prints the workflow and does not spend credits. "
-            "A live stage runs only when **Spend Comfy credits** is checked, and it reads `COMFY_API_KEY` from the environment."
+            "Use photos of people who consented, or photos you have rights to. "
+            "A scene is a location plus 1 or 2 people. Leave Person B empty for one person. "
+            "Dry-run prints the workflow and does not spend credits. "
+            "A live stage runs only when **Spend Comfy credits** is checked, and it reads `COMFY_API_KEY` from the environment. "
+            "Generations go through Comfy Cloud partner nodes."
         )
         with gr.Row():
             location = gr.File(label="Location reference", file_types=["image"])
             person_a_file = gr.File(label="Person A reference", file_types=["image"])
-            person_b_file = gr.File(label="Person B reference", file_types=["image"])
+            person_b_file = gr.File(label="Person B reference (optional)", file_types=["image"])
         with gr.Row():
             title = gr.Textbox(label="Title", value="Backyard burgers")
             setting = gr.Textbox(label="Setting", value="a wooden backyard table in warm afternoon light")
@@ -44,7 +47,7 @@ def build_demo() -> gr.Blocks:
             object_a = gr.Textbox(label="Person A held object", value="a burger")
             hand_a = gr.Dropdown(["left", "right"], value="left", label="Person A held hand")
         with gr.Row():
-            name_b = gr.Textbox(label="Person B name", value="Person B")
+            name_b = gr.Textbox(label="Person B name (optional)", value="Person B")
             slot_b = gr.Dropdown(["left", "right"], value="right", label="Person B seat")
             object_b = gr.Textbox(label="Person B held object", value="a burger")
             hand_b = gr.Dropdown(["left", "right"], value="left", label="Person B held hand")
@@ -143,7 +146,7 @@ def _preview(*values):
     except (SceneError, TemplateError) as exc:
         return f"error: {exc}", ""
     estimate = estimate_run(count, count, scene.duration)
-    return preview_text(scene) + "\n\n" + estimate.format(), estimate.format()
+    return _mode_note(scene) + preview_text(scene) + "\n\n" + estimate.format(), estimate.format()
 
 
 def _dry_start(*values):
@@ -152,7 +155,7 @@ def _dry_start(*values):
         result = run_start(scene, count, True, False, WORK)
     except (SceneError, TemplateError, ComfyError) as exc:
         return f"error: {exc}", [], ""
-    return result.render(), [], ledger_text(WORK)
+    return _mode_note(scene) + result.render(), [], ledger_text(WORK)
 
 
 def _run_start(*values):
@@ -167,7 +170,7 @@ def _run_start(*values):
     except (SceneError, TemplateError, ComfyError) as exc:
         return f"error: {exc}", [], ledger_text(WORK), []
     files = [str(path) for path in result.files]
-    return result.render(), files, ledger_text(WORK), files
+    return _mode_note(scene) + result.render(), files, ledger_text(WORK), files
 
 
 def _run_end(*values):
@@ -184,7 +187,7 @@ def _run_end(*values):
         text = exc.estimate.format() if isinstance(exc, SpendRequired) else f"error: {exc}"
         return text, [], ledger_text(WORK), []
     saved = [str(path) for path in result.files]
-    return result.render(), saved, ledger_text(WORK), saved
+    return _mode_note(scene) + result.render(), saved, ledger_text(WORK), saved
 
 
 def _run_video(*values):
@@ -203,7 +206,7 @@ def _run_video(*values):
         text = exc.estimate.format() if isinstance(exc, SpendRequired) else f"error: {exc}"
         return text, None, ledger_text(WORK), None
     path = str(result.files[0]) if result.files else None
-    return result.render(), path, ledger_text(WORK), path
+    return _mode_note(scene) + result.render(), path, ledger_text(WORK), path
 
 
 def _run_qa(*values):
@@ -249,22 +252,10 @@ def _scene_from_form(
         "video_resolution": video_resolution,
         "duration": int(duration),
         "refs": {"location": _materialize(location, WORK / "refs" / "location.png")},
-        "characters": [
-            {
-                "name": name_a,
-                "image": _materialize(person_a_file, WORK / "refs" / "person_a.png"),
-                "slot": slot_a,
-                "held_object": object_a,
-                "held_hand": hand_a,
-            },
-            {
-                "name": name_b,
-                "image": _materialize(person_b_file, WORK / "refs" / "person_b.png"),
-                "slot": slot_b,
-                "held_object": object_b,
-                "held_hand": hand_b,
-            },
-        ],
+        "characters": _form_characters(
+            name_a, slot_a, object_a, hand_a, person_a_file,
+            name_b, slot_b, object_b, hand_b, person_b_file,
+        ),
         "table_lock": table_lock or "",
         "start_pose": start_pose,
         "end_pose": end_pose,
@@ -272,6 +263,39 @@ def _scene_from_form(
     }
     scene = scene_from_mapping(data, WORK)
     return scene, max(1, int(count))
+
+
+def _mode_note(scene) -> str:
+    if len(scene.characters) == 1:
+        return "One-person mode: no Person B file.\n\n"
+    return ""
+
+
+def _form_characters(
+    name_a, slot_a, object_a, hand_a, person_a_file,
+    name_b, slot_b, object_b, hand_b, person_b_file,
+) -> list[dict]:
+    """Person B is included only when a reference file was uploaded."""
+    characters = [
+        {
+            "name": name_a,
+            "image": _materialize(person_a_file, WORK / "refs" / "person_a.png"),
+            "slot": slot_a,
+            "held_object": object_a,
+            "held_hand": hand_a,
+        }
+    ]
+    if _as_path(person_b_file):
+        characters.append(
+            {
+                "name": name_b,
+                "image": _materialize(person_b_file, WORK / "refs" / "person_b.png"),
+                "slot": slot_b,
+                "held_object": object_b,
+                "held_hand": hand_b,
+            }
+        )
+    return characters
 
 
 def _materialize(upload, dest: Path) -> str:

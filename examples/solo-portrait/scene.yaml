@@ -1,0 +1,51 @@
+# Generic one-person portrait. Put your own consented reference photo, or a
+# photo you have rights to, at the paths below. This folder ships no photos.
+
+title: Solo portrait
+setting: a quiet window seat at a wooden table in soft morning light
+
+aspect_ratio: "9:16"
+image_resolution: "1K"
+video_resolution: "720p"
+duration: 8
+
+image_model: gemini-3-pro-image-preview
+video_model: seedance-1-5-pro-251215
+
+refs:
+  location: refs/location.png
+
+characters:
+  - name: Person A
+    appearance: the person
+    image: refs/person.png
+    slot: left
+    held_object: ceramic mug
+    held_hand: right
+
+table_lock:
+  - exactly one ceramic mug
+  - exactly one small plate in front of the person
+  - exactly one folded paper napkin beside the plate
+
+start_pose: >
+  The person is sitting up, with a closed-mouth smile, looking slightly aside.
+  They are not eating. The right hand holds exactly one ceramic mug, low and
+  away from the mouth. The left hand is empty and open on the table, fully visible.
+
+end_pose: >
+  The person changes from sitting up to sitting down, a small reachable change
+  of position in the same seat. The ceramic mug stays in the right hand. The
+  left hand stays on the table.
+
+motion_beat: >
+  The person slowly moves from sitting up to sitting down, with a closed-mouth
+  smile. The mug stays in the right hand. The left hand stays on the table.
+
+# Optional [x, y, width, height] in start-frame pixels for the QA table crop.
+table_bbox: null
+
+seeds:
+  start: [61001]
+  end: [62001]
+  video: [64001]
